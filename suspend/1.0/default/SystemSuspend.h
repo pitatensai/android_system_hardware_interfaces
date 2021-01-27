@@ -103,6 +103,7 @@ class SystemSuspend : public ISystemSuspend {
     uint32_t mSuspendCounter;
     unique_fd mWakeupCountFd;
     unique_fd mStateFd;
+    unique_fd mMemsleepFd = (unique_fd)-1;
 
     unique_fd mSuspendStatsFd;
 

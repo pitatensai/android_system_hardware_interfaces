@@ -41,13 +41,15 @@ namespace suspend {
 namespace V1_0 {
 
 static const char kSleepState[] = "mem";
-static const char kSleepStateUltra[] = "ultra";
+static const char kDeepMemsleep[] = "deep";
+static const char kUltraMemsleep[] = "ultra";
 // TODO(b/128923994): we only need /sys/power/wake_[un]lock to export debugging info via
 // /sys/kernel/debug/wakeup_sources.
 static constexpr char kSysPowerWakeLock[] = "/sys/power/wake_lock";
 static constexpr char kSysPowerWakeUnlock[] = "/sys/power/wake_unlock";
 static constexpr char mkSysWifiState[] = "/sys/class/net/wlan0/carrier";
 static constexpr char mkSysBtState[] = "/sys/class/rfkill/rfkill0/state";
+static constexpr char kSysPowerMemsleep[] = "/sys/power/mem_sleep";
 
 // This function assumes that data in fd is small enough that it can be read in one go.
 // We use this function instead of the ones available in libbase because it doesn't block
@@ -112,6 +114,13 @@ SystemSuspend::SystemSuspend(unique_fd wakeupCountFd, unique_fd stateFd, unique_
             PLOG(ERROR) << "error opening " << kSysPowerWakeUnlock;
         }
     }
+
+    if (mMemsleepFd < 0) {
+	    mMemsleepFd.reset(TEMP_FAILURE_RETRY(open(kSysPowerMemsleep, O_CLOEXEC | O_RDWR)));
+	    if (mMemsleepFd < 0) {
+		    PLOG(ERROR) << "error opening " << kSysPowerMemsleep;
+	    }
+    }
 }
 
 bool SystemSuspend::enableAutosuspend() {
@@ -143,12 +152,19 @@ bool SystemSuspend::forceSuspend() {
     btState = android::base::Trim(btState);
 
     if (btState=="1" || wifiState=="1") {
-	    LOG(ERROR) << "forceSuspend: is Mem btState " << btState << " wifiState " << wifiState;
-	    success = WriteStringToFd(kSleepState, mStateFd);
+	    LOG(ERROR) << "forceSuspend: is deep btState " << btState << " wifiState " << wifiState;
+	    success = WriteStringToFd(kDeepMemsleep, mMemsleepFd);
     } else {
-	    LOG(ERROR) << "forceSuspend: is Ultra btState " << btState << " wifiState " << wifiState;
-	    success = WriteStringToFd(kSleepStateUltra, mStateFd);
+	    LOG(ERROR) << "forceSuspend: is ultra btState " << btState << " wifiState " << wifiState;
+	    success = WriteStringToFd(kUltraMemsleep, mMemsleepFd);
     }
+
+    if (!success) {
+        PLOG(VERBOSE) << "error writing to /sys/power/mem_sleep for forceSuspend";
+    }
+
+    LOG(ERROR) << "forceSuspend: set Mem btState " << btState << " wifiState " << wifiState;
+    success = WriteStringToFd(kSleepState, mStateFd);
 
     counterLock.unlock();
 
@@ -222,12 +238,19 @@ void SystemSuspend::initAutosuspend() {
 	    btState = android::base::Trim(btState);
 
 	    if (btState=="1" || wifiState=="1") {
-		    LOG(ERROR) << "is Mem btState " << btState << " wifiState " << wifiState;
-		    success = WriteStringToFd(kSleepState, mStateFd);
+		    LOG(ERROR) << "forceSuspend: is deep btState " << btState << " wifiState " << wifiState;
+		    success = WriteStringToFd(kDeepMemsleep, mMemsleepFd);
 	    } else {
-		    LOG(ERROR) << "is Ultra btState " << btState << " wifiState " << wifiState;
-		    success = WriteStringToFd(kSleepStateUltra, mStateFd);
+		    LOG(ERROR) << "forceSuspend: is ultra btState " << btState << " wifiState " << wifiState;
+		    success = WriteStringToFd(kUltraMemsleep, mMemsleepFd);
 	    }
+
+	    if (!success) {
+		    PLOG(VERBOSE) << "error writing to /sys/power/mem_sleep";
+	    }
+
+	    LOG(ERROR) << "forceSuspend: set Mem btState " << btState << " wifiState " << wifiState;
+	    success = WriteStringToFd(kSleepState, mStateFd);
 
             counterLock.unlock();
 
